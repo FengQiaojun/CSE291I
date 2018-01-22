@@ -1,0 +1,24 @@
+SGD_no
+Final validation accuracy: 0.45420
+Final test accuracy: 0.48390
+
+SGD_batchnorm
+Final validation accuracy: 0.80940
+Final test accuracy: 0.81210
+
+Adam_no
+Final validation accuracy: 0.99040
+Final test accuracy: 0.98980
+
+Adam_batchnorm
+Final validation accuracy: 0.98880
+Final test accuracy: 0.98820
+
+RMS_no
+Final validation accuracy: 0.98680
+Final test accuracy: 0.98850
+
+RMS_batchnorm
+Final validation accuracy: 0.99180
+Final test accuracy: 0.99020
+
