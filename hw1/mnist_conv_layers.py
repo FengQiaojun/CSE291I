@@ -22,8 +22,8 @@ num_batches = 3000
 batch_size = 110
 learning_rate = 0.002
 
-for layer_num in [7,5,3]:
-    for batch_norm in [True,False]:
+for layer_num in [7]:
+    for batch_norm in [True]:
 
         inputs = tf.placeholder(tf.float32, [None, 28, 28, 1])
         labels = tf.placeholder(tf.float32, [None, 10])

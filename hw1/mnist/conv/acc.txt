@@ -22,3 +22,28 @@ RMS_batchnorm
 Final validation accuracy: 0.99180
 Final test accuracy: 0.99020
 
+
+3_no
+Final validation accuracy: 0.61880
+Final test accuracy: 0.63180
+
+3_batchnorm
+Final validation accuracy: 0.83200
+Final test accuracy: 0.83570
+
+5_no
+Final validation accuracy: 0.83280
+Final test accuracy: 0.84100
+
+5_batchnorm
+Final validation accuracy: 0.86240
+Final test accuracy: 0.86660
+
+7_no
+Final validation accuracy: 0.59840
+Final test accuracy: 0.60650
+
+7_batchnorm
+Final validation accuracy: 0.80760
+Final test accuracy: 0.80690
+
