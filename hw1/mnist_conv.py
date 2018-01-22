@@ -22,8 +22,6 @@ num_batches = 3000
 batch_size = 110
 learning_rate = 0.002
 
-
-
 inputs = tf.placeholder(tf.float32, [None, 28, 28, 1])
 labels = tf.placeholder(tf.float32, [None, 10])
 is_training = tf.placeholder(tf.bool)
