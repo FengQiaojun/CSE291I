@@ -18,12 +18,14 @@ def conv_layer(prev_layer, layer_depth, batch_norm, is_training=False):
     return conv_layer
 
 
-num_batches = 3000
+num_batches = 6000
 batch_size = 110
 learning_rate = 0.002
 
-for layer_num in [7]:
-    for batch_norm in [True]:
+layer_num = 7
+
+for learning_rate in [0.1]:
+    for batch_norm in [False]:
 
         inputs = tf.placeholder(tf.float32, [None, 28, 28, 1])
         labels = tf.placeholder(tf.float32, [None, 10])
@@ -61,9 +63,9 @@ for layer_num in [7]:
 
         merged = tf.summary.merge_all()
         if batch_norm: 
-            logdir = "mnist/conv/SGD_batchnorm_"+str(layer_num)
+            logdir = "mnist/conv/SGD_batchnorm_"+str(learning_rate)
         else:
-            logdir = "mnist/conv/SGD_no_batchnorm"+str(layer_num)
+            logdir = "mnist/conv/SGD_no_batchnorm"+str(learning_rate)
 
         writer = tf.summary.FileWriter(logdir, sess.graph)
 
