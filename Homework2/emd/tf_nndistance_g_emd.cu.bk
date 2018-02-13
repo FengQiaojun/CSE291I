@@ -1,0 +1,291 @@
+#if GOOGLE_CUDA
+#define EIGEN_USE_GPU
+#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
+
+#define EPSILON 1
+//NUM_THREADS is equal to N must be 2^k where k<=10
+#define NUM_THREADS 1024
+//#define DEBUG 0
+
+#include <cub/cub.cuh>
+
+
+
+__device__
+void find_max(int n, float* arr, int* best, int* index)
+{
+		//assert(n==blockDim.x);
+		__shared__ int sdata[NUM_THREADS];
+		__shared__ int idxdata[NUM_THREADS];
+		sdata[threadIdx.x] = arr[threadIdx.x];
+		idxdata[threadIdx.x] = threadIdx.x;
+		__syncthreads();
+		for (int s=1; s < blockDim.x; s *=2)
+		{
+			int index = 2 * s * threadIdx.x;;
+
+			if (index < blockDim.x)
+			{
+				if(sdata[index+s] > sdata[index])
+				{
+					sdata[index]=sdata[index+s];
+					idxdata[index]=idxdata[index+s];
+				}
+			}
+			__syncthreads();
+		}
+
+		// write result for this block to global mem
+		if (threadIdx.x == 0)
+		{
+			*best=sdata[0];
+			*index=idxdata[0];
+		}	
+}
+
+__global__
+void constructadjmat(int n,const  float *src, const float *tgt, float* adj, float* prices, int* src2tgt, int*tgt2src, float* average)
+{
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
+	for (int idx = index; idx < n*n; idx += stride)
+	{
+		int i = idx/n;
+		int j = idx-n*i;
+		float x1=src[i*3];
+		float y1=src[i*3+1];
+		float z1=src[i*3+2];
+		float x2=tgt[j*3];
+		float y2=tgt[j*3+1];
+		float z2=tgt[j*3+2];
+		double d1=x1-x2;
+		double d2=y1-y2;
+		double d3=z1-z2;
+		double d =d1*d1+d2*d2+d3*d3;
+		adj[i*n+j]=d;
+		atomicAdd(average,  d*1.0/(n*n));
+	}
+	for (int idx = index; idx < n; idx += stride)
+	{
+		prices[idx]=0;
+		src2tgt[idx]=-1;
+		tgt2src[idx]=-1;
+	}
+
+}
+
+__global__
+void  calcbidvalues(int n, int* src2tgt, float* adj, float* prices,  bool* complete, float* values, float* bids)
+{
+	int INDEX = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
+	for (int idx = INDEX; idx < n*n; idx += stride)
+	{
+		int i=idx/n;
+		int j= idx-i*n;
+		bids[i*n+j]=-1;
+		if(src2tgt[i]!=-1)
+		{
+			continue;
+		}
+		complete[0]=false;
+		values[i*n+j]= -adj[i*n+j]-prices[j];
+	}
+}
+
+__global__
+void submitbids(int n, int* src2tgt, float* prices, float* bids,  float* values, double eps)
+{
+	assert(n==blockDim.x);
+	int INDEX = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
+	for (int idx = INDEX; idx < n*n; idx += stride)
+	{
+		int i = idx/n;
+		if(src2tgt[i]!=-1)
+			continue;
+		int best,index, best2, index2;
+		find_max(n, values+i*n, &best, &index);
+		if (threadIdx.x == 0)
+			values[i*n+index]=INT_MIN;
+		__syncthreads();
+		find_max(n, values+i*n, &best2, &index2);
+
+		if (idx%n == 0)
+		{
+			bids[index*n+i] = prices[index]+best-best2+eps;
+		}
+	}
+}
+
+__global__
+void processbids(int n, float* bids, int* src2tgt, int* tgt2src, float* prices, float* result, float* result2, float*adj)
+{
+	assert(n==blockDim.x);
+	int INDEX = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
+	for (int idx = INDEX; idx < n*n; idx += stride)
+	{
+		int j=idx/n;
+		int best,index;
+		find_max(n,bids+j*n,&best,&index);
+		if(idx%n==0 && best != -1)
+		{
+			int prev=tgt2src[j];
+			if(prev!=-1)
+				src2tgt[prev]=-1;
+			src2tgt[index]=j;
+			result[index]=adj[index*n+j];
+			tgt2src[j]=index;
+			result2[j]=adj[index*n+j];
+			prices[j]=bids[j*n+index];
+		}
+	}
+	
+}
+
+
+
+void NnEMDDistanceKernelLauncher(int b,int N,const float * src,const float * tgt,float * result,int * src2tgt,float * result2,int * tgt2src){
+	//N=NUM_THREADS;
+	//float* src, *tgt;
+	float *adj, *prices,*bids, *values;
+	//int  *src2tgt, *tgt2src;
+	bool* complete;
+	float* average;
+
+	// Allocate Unified Memory – accessible from CPU or GPU
+	//cudaMallocManaged(&src, 3*N*sizeof(float));
+	//cudaMallocManaged(&tgt, 3*N*sizeof(float));
+	cudaMallocManaged(&adj, N*N*sizeof(float));
+	cudaMallocManaged(&prices, N*sizeof(float)); //init to 0
+	cudaMallocManaged(&bids, N*N*sizeof(float)); 
+	cudaMallocManaged(&values, N*N*sizeof(float));
+
+
+	cudaMallocManaged(&complete, sizeof(bool)); 
+	cudaMallocManaged(&average, sizeof(float)); 
+
+	//cudaDeviceSynchronize();
+	//std::cout<<"MEMCPY BEGIN"<<std::endl;
+	//std::cout<<"XYZ: "<<xyz[0]<<std::endl;
+	//std::memcpy(src, xyz, 3*N*sizeof(float));
+	//std::memcpy(tgt, xyz2, 3*N*sizeof(float));
+	//std::cout<<"MEMCPY END"<<std::endl;
+
+
+	#if DEBUG
+	std::cout<<"SOURCE TGT: "<<std::endl;
+	for(int i=0; i < NUM_THREADS; i++)
+	{
+		int idx=i*3;
+		printf("%f %f %f        %f %f %f\n",src[idx], src[idx+1], src[idx+2], tgt[idx], tgt[idx+1], tgt[idx+2]);
+	}
+	#endif
+	//How to determine threads vs blocks?
+	int num_blocks=(N*N)/NUM_THREADS;
+	constructadjmat<<<num_blocks, NUM_THREADS>>>(N, src, tgt, adj, prices, src2tgt, tgt2src, average);
+	#ifdef DEBUG
+	cudaDeviceSynchronize();
+	printf("\n  ");
+	for(int i=0; i <8;i++)
+		printf("%3d ",i);
+	printf("\n");
+	for(int i= 0; i < 8; i++)
+	{
+		printf("%3d ",i);
+		for(int j=0; j < 8; j++)
+		{
+			printf("%03d ", (int)adj[i*N+j]);
+		}
+		std::cout<<std::endl;
+	}
+	#endif
+	complete[0]=false;
+	int iter=0;	
+	while(1)
+	{
+		
+		//cudaDeviceSynchronize();
+		iter++;
+		//std::cout<<"ITER: "<<iter<<std::endl;	
+	
+		//How expensive is launching a kernel
+		num_blocks=(N*N)/NUM_THREADS;
+		calcbidvalues<<<num_blocks, NUM_THREADS>>>(N, src2tgt, adj, prices, complete, values, bids);
+		#ifdef DEBUG
+		cudaDeviceSynchronize();
+		printf("VALS: \n  ");
+		for(int i=0; i <N;i++)
+			printf("%4d ",i);
+		printf("\n");
+		for(int i= 0; i < N; i++)
+		{
+			printf("%4d ",i);
+			for(int j=0; j < N; j++)
+			{
+				printf("%04d ", (int)values[i*N+j]);
+			}
+			std::cout<<std::endl;
+		}
+		#endif
+		cudaDeviceSynchronize();
+		if(complete[0])
+			break;
+		complete[0]=true;
+		//std::cout<<"AVERAGE: "<<average[0]<<std::endl;
+		num_blocks=(N*N)/NUM_THREADS;
+		submitbids<<<num_blocks, NUM_THREADS>>>(N, src2tgt, prices, bids,  values, EPSILON*average[0]);
+		#if DEBUG
+		cudaDeviceSynchronize();
+		printf("BIDS: \n  ");
+		for(int i=0; i <N;i++)
+			printf("%3d ",i);
+		printf("\n");
+		for(int i= 0; i < N; i++)
+		{
+			printf("%3d ",i);
+			for(int j=0; j < N; j++)
+			{
+				printf("%03d ", (int)bids[i*N+j]);
+			}
+			std::cout<<std::endl;
+		}
+		#endif
+
+		//find max bid for each project
+		num_blocks=(N*N)/NUM_THREADS;
+		processbids<<<num_blocks, NUM_THREADS>>>(N, bids,  src2tgt, tgt2src, prices, result, result2, adj);
+		#if DEBUG
+		cudaDeviceSynchronize();
+		printf("Src2tgt: \n  ");
+		for(int i=0; i <N;i++)
+			printf("%3d ",src2tgt[i]);
+		printf("\n");
+		printf("Prices: \n  ");
+		for(int i=0; i <N;i++)
+			printf("%3d ", (int)prices[i]);
+		printf("\n");
+		char c;
+		get(c);
+		#endif
+		
+	}
+	std::cout<<iter<<std::endl;
+	
+	// Free memory
+	//cudaFree(src);
+	//cudaFree(tgt);
+	cudaFree(values);
+	cudaFree(adj);
+	cudaFree(prices);
+	cudaFree(bids);
+	cudaFree(complete);
+	cudaFree(average);
+
+
+
+
+}
+
+#endif
