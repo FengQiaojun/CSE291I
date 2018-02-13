@@ -1,8 +1,6 @@
 # Author: 	Qiaojun Feng
 # Date:		02/10/2018
 
-
-
 # read in the vertices and the faces from .obj files
 import pymesh
 import pickle
