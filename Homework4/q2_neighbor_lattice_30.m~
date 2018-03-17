@@ -1,0 +1,12 @@
+function neigs = q2_neighbor_lattice_30(index)
+   
+    neigs = [];
+    if index-1>0 && nod(index-1,10)~=0
+        neigs = [neigs,index-1];
+    end
+    if index+1<=30 && nod(index-1,10)~=0
+        neigs = [neigs,index-1];
+    end
+
+    
+end
