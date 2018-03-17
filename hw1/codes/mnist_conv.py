@@ -5,7 +5,7 @@ mnist = input_data.read_data_sets("MNIST_data/", one_hot=True, reshape=False)
 def fully_connected(prev_layer, num_units, batch_norm, is_training=False):
     layer = tf.layers.dense(prev_layer, num_units, use_bias=False, activation=None)
     if batch_norm:
-    	layer = tf.layers.batch_normalization(layer, training=is_training)
+        layer = tf.layers.batch_normalization(layer, training=is_training)
     layer = tf.nn.relu(layer)
     return layer
 
@@ -13,7 +13,7 @@ def conv_layer(prev_layer, layer_depth, batch_norm, is_training=False):
     strides = 2 if layer_depth % 3 == 0 else 1
     conv_layer = tf.layers.conv2d(prev_layer, layer_depth*4, 3, strides, 'same', use_bias=False, activation=None)
     if batch_norm:
-    	conv_layer = tf.layers.batch_normalization(conv_layer, training=is_training)
+        conv_layer = tf.layers.batch_normalization(conv_layer, training=is_training)
     conv_layer = tf.nn.relu(conv_layer)
     return conv_layer
 
@@ -58,9 +58,9 @@ sess = tf.Session()
 
 merged = tf.summary.merge_all()
 if batch_norm: 
-	logdir = "mnist/conv/SGD_batchnorm"
+    logdir = "mnist/conv/SGD_batchnorm"
 else:
-	logdir = "mnist/conv/SGD_no_batchnorm"
+    logdir = "mnist/conv/SGD_no_batchnorm"
 writer = tf.summary.FileWriter(logdir, sess.graph)
 
 sess.run(tf.global_variables_initializer())
@@ -73,8 +73,8 @@ for batch_i in range(num_batches):
 
     if batch_i % 200 == 0:
         loss, acc = sess.run([model_loss, accuracy], {inputs: mnist.validation.images,
-        	labels: mnist.validation.labels,
-        	is_training: False})
+            labels: mnist.validation.labels,
+            is_training: False})
         print('Batch: {:>2}: Validation loss: {:>3.5f}, Validation accuracy: {:>3.5f}'.format(batch_i, loss, acc))
     elif batch_i % 50 == 0:
         loss, acc = sess.run([model_loss, accuracy], {inputs: batch_xs, labels: batch_ys, is_training: False})
@@ -82,9 +82,9 @@ for batch_i in range(num_batches):
 
         # At the end, score the final accuracy for both the validation and test sets
 acc = sess.run(accuracy, {inputs: mnist.validation.images,
-	labels: mnist.validation.labels,is_training: False})
+    labels: mnist.validation.labels,is_training: False})
 print('Final validation accuracy: {:>3.5f}'.format(acc))
 acc = sess.run(accuracy, {inputs: mnist.test.images,
-	labels: mnist.test.labels,is_training: False})
+    labels: mnist.test.labels,is_training: False})
 print('Final test accuracy: {:>3.5f}'.format(acc))
     
